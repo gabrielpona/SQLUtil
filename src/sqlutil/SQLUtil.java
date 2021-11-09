@@ -51,6 +51,7 @@ public class SQLUtil {
     
     public void test(){
         
+        
         String fileLocation = "c:\\tmp\\processos.xml";
                 
         final String ROW_ELEMENT = "row";
@@ -114,7 +115,7 @@ public class SQLUtil {
                                 
     }
     
-    public void readLargeXML (String filename,String[] fieldTypes,String tableName){
+    public void readLargeXML (String filename,String[] fieldTypes,String tableName,int limit){
                     
         
         String fileLocation = this.path.concat("teste\\").concat(filename).concat(".xml");
@@ -150,7 +151,7 @@ public class SQLUtil {
                 if ((XMLStreamConstants.START_ELEMENT == eventCode) && xmlStreamReader.getLocalName().equalsIgnoreCase(ROW_ELEMENT)) {
                            
                         if(cont == 0){
-                            fos = new FileOutputStream(new File(this.path.concat("teste\\").concat(tableName).concat("_convertido(".concat(Integer.toString(++fileNumber).concat(").sql")))));
+                            fos = new FileOutputStream(new File(this.path.concat("teste2\\").concat("\\").concat(tableName).concat("_convertido(".concat(Integer.toString(++fileNumber).concat(").sql")))));
                             bw = new BufferedWriter(new OutputStreamWriter(fos));                                                                                    
                         }
                                                 
@@ -186,7 +187,7 @@ public class SQLUtil {
                         cont++;                         
                         line = line.concat(");");
 
-                        if(cont >= 10000){                                                        
+                        if(cont >= limit){                                                        
                             cont = 0;
                             bw.write(insertStatement);
                             bw.write(line);
@@ -214,6 +215,162 @@ public class SQLUtil {
         }
                                 
     }
+    
+    
+    private int countXMLRows(String file){
+        
+        int cont = 0;
+        int eventCode;
+        
+        final String ROW_ELEMENT = "row";
+        final String COLUMN_ELEMENT = "column";
+        
+        FileInputStream fileInputStream;
+        XMLStreamReader xmlStreamReader;
+        try{
+            
+            fileInputStream = new FileInputStream(file);
+            xmlStreamReader = XMLInputFactory.newInstance().createXMLStreamReader(fileInputStream);
+            
+            while (xmlStreamReader.hasNext()) {
+                                                                                                                                                             
+                eventCode = xmlStreamReader.next();
+                                
+                //Counting rows
+                if ((XMLStreamConstants.START_ELEMENT == eventCode) && xmlStreamReader.getLocalName().equalsIgnoreCase(ROW_ELEMENT)) {
+                    cont++;
+                }
+            }
+            xmlStreamReader.close();
+            fileInputStream.close();
+        }catch(Exception e){
+            e.printStackTrace();
+        }
+                        
+        return cont;        
+    }
+    
+    
+    
+    public void readLargeXML2 (String filename,String[] fieldTypes,String tableName,int limit){
+                            
+        String fileLocation = this.path.concat("teste\\").concat(filename).concat(".xml");
+        
+        FileInputStream fileInputStream;
+        XMLStreamReader xmlStreamReader;
+        
+        final String ROW_ELEMENT = "row";
+        final String COLUMN_ELEMENT = "column";
+        
+        final String insertStatement = "INSERT INTO ".concat(tableName).concat(" values ");   
+        
+        int eventCode;
+        
+        final int multipleRows = 10;        
+        
+        FileOutputStream fos;
+        BufferedWriter bw = null;                                                                     
+        String line = "";
+        
+        int cont = 0;
+        int columnCount = 0;
+        int fileNumber = 0;
+        
+        int rows = this.countXMLRows(fileLocation);
+        
+        try{
+            
+            fileInputStream = new FileInputStream(fileLocation);
+            xmlStreamReader = XMLInputFactory.newInstance().createXMLStreamReader(fileInputStream);
+            
+            while (xmlStreamReader.hasNext()) {
+                                                                                                                                                             
+                eventCode = xmlStreamReader.next();
+                                
+                //Opening Line
+                if ((XMLStreamConstants.START_ELEMENT == eventCode) && xmlStreamReader.getLocalName().equalsIgnoreCase(ROW_ELEMENT)) {
+                           
+                        if(cont == 0){
+                            fos = new FileOutputStream(new File(this.path.concat("teste2\\").concat("\\").concat(tableName).concat("_convertido(".concat(Integer.toString(++fileNumber).concat(").sql")))));
+                            bw = new BufferedWriter(new OutputStreamWriter(fos));                                                                                    
+                        }
+                                                
+                        line = "(";
+                        columnCount = 0;
+                        while (xmlStreamReader.hasNext()) {    
+                            
+                            eventCode = xmlStreamReader.next();                            
+                            
+                            if ((XMLStreamConstants.END_ELEMENT == eventCode) && xmlStreamReader.getLocalName().equalsIgnoreCase(COLUMN_ELEMENT)) {                                                               
+                                System.out.println("FECHA");
+                                break;
+                            }else{                            
+                                if ((XMLStreamConstants.START_ELEMENT == eventCode) && xmlStreamReader.getLocalName().equalsIgnoreCase(COLUMN_ELEMENT)) {
+                                    line = line.concat(this.trataCampo(xmlStreamReader.getElementText(), fieldTypes[columnCount]));                                    
+                                    if(columnCount < fieldTypes.length-1){
+                                        line = line.concat(",");
+                                    }else{
+                                        //System.out.println(line);
+                                        break;
+                                    }
+                                    //System.out.println("Linha: ".concat(Integer.toString(cont)).concat(" Coluna: ").concat(Integer.toString(columnCount)));                                    
+                                    columnCount++;                                  
+                                }                                
+                            }                                                        
+                        }                                                                            
+                }else{                    
+                    //Closing row
+                    if ((XMLStreamConstants.END_ELEMENT == eventCode) && xmlStreamReader.getLocalName().equalsIgnoreCase(ROW_ELEMENT)) {                    
+                        cont++;
+                         
+                        //line = line.concat("[").concat(Integer.toString(cont%multipleRows)).concat("]");      
+                        //line = line.concat("[").concat(Integer.toString(cont+((fileNumber-1)*limit))).concat("/"); 
+                       // line = line.concat("").concat(Integer.toString(rows)).concat("]"); 
+                        
+                        if((cont%multipleRows) < (multipleRows-1) && cont<limit){//checking if not the file's final row
+                            if(cont+((fileNumber-1)*limit)<rows){//Checking if it's note the final row
+                                line = line.concat("),");
+                            }else{
+                                line = line.concat(");");
+                            }                            
+                        }else{
+                            line = line.concat(");");//closing the statement
+                        }
+                                                                                           
+                        if(cont >= limit){                                                                                                                
+                            if(cont%multipleRows == 0){
+                                bw.write(insertStatement);
+                            }                            
+                            bw.write(line);
+                            bw.newLine();
+                            bw.flush();
+                            bw.close(); 
+                            cont = 0;
+                        }else{                             
+                            if(cont%multipleRows == 0 || cont==1){
+                                bw.write(insertStatement);
+                            }
+                            bw.write(line);
+                            bw.newLine();                            
+                        }                                        
+                        System.out.println(line);
+                    }                                                            
+                }                                                                                                                                                                                
+            }
+            
+            if ( bw != null){
+                bw.flush();
+                bw.close();
+            }
+                                               
+        }catch(Exception e){
+            Logger.getLogger(SQLUtil.class.getName()).log(Level.SEVERE, null, e);
+        }
+                                
+    }
+    
+    
+    
     
     public void readXML(String filename,String[] fieldTypes,String tableName){                
         Document doc;
